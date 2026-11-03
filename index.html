@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14532d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Getränkeverkauf">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <title>Getränkeverkauf</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#17221b; background:#f3f6f3; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding: max(14px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom)); }
+    .app { max-width:1100px; margin:0 auto; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+    h1 { margin:0; font-size:clamp(1.5rem,4vw,2.2rem); }
+    button { border:0; border-radius:12px; padding:14px 17px; font:inherit; font-weight:700; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+    button:focus-visible,input:focus-visible { outline:3px solid #60a5fa; outline-offset:2px; }
+    .settings-toggle { background:#e1e9e2; color:#173d25; }
+    .settings { background:white; border:1px solid #dce5dd; border-radius:16px; padding:16px; margin-bottom:18px; }
+    .settings h2 { margin:0 0 6px; font-size:1.15rem; }
+    .hint { color:#5e6d62; margin:0 0 14px; font-size:.95rem; }
+    .edit-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(95px,130px); gap:9px 12px; align-items:center; }
+    input { width:100%; min-width:0; padding:13px; border:1px solid #cbd5cc; border-radius:10px; font:inherit; font-size:16px; background:#fff; }
+    .products { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .product { background:white; border:1px solid #dce5dd; border-radius:16px; padding:14px; box-shadow:0 2px 7px #173d250a; min-width:0; }
+    .product-name { font-size:1.05rem; font-weight:750; overflow-wrap:anywhere; }
+    .price { color:#166534; font-weight:800; font-size:1.3rem; margin:7px 0 13px; }
+    .counter { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .counter button { width:52px; height:52px; padding:0; font-size:1.7rem; }
+    .minus { background:#edf1ed; color:#26352a; }
+    .plus { background:#166534; color:white; }
+    .minus:disabled { opacity:.35; }
+    .count { min-width:28px; text-align:center; font-size:1.4rem; font-weight:800; font-variant-numeric:tabular-nums; }
+    .summary { position:sticky; bottom:max(8px,env(safe-area-inset-bottom)); margin-top:18px; background:#123d25; color:white; border-radius:18px; padding:16px 18px; box-shadow:0 5px 20px #102b1b30; }
+    .summary-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .summary-label { font-size:.95rem; color:#d2e5d6; }
+    .total { font-size:clamp(1.8rem,6vw,2.5rem); font-weight:850; font-variant-numeric:tabular-nums; }
+    .reset { width:100%; margin-top:13px; background:#fff; color:#17452a; }
+    @media (min-width:700px) { .products { grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; } .product { padding:18px; } }
+    @media (min-width:1000px) { .products { grid-template-columns:repeat(5,minmax(0,1fr)); } }
+  </style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>🥤 Getränkeverkauf</h1>
+    <button class="settings-toggle" id="settingsToggle" type="button">⚙️ Getränke bearbeiten</button>
+  </header>
+  <section class="settings" id="settingsPanel" hidden>
+    <h2>Getränke und Preise</h2>
+    <p class="hint">Namen und Einzelpreise einstellen. Änderungen werden auf diesem Gerät gespeichert.</p>
+    <div class="edit-grid" id="editGrid"></div>
+  </section>
+  <section><div class="products" id="products" aria-label="Getränkeauswahl"></div></section>
+  <section class="summary" aria-live="polite">
+    <div class="summary-row">
+      <div><div class="summary-label">Getränke insgesamt</div><div class="total" id="itemCount">0</div></div>
+      <div style="text-align:right"><div class="summary-label">Gesamtbetrag</div><div class="total" id="total">0,00 €</div></div>
+    </div>
+    <button class="reset" id="reset" type="button">↻ Neue Bestellung / Zurücksetzen</button>
+  </section>
+</main>
+<script>
+const defaults = Array.from({length:10},(_,i)=>({name:`Getränk ${i+1}`,price:2.5,count:0}));
+function loadItems(){
+  try {
+    const saved=JSON.parse(localStorage.getItem('getraenkeverkauf-items'));
+    if(Array.isArray(saved)&&saved.length===10) return saved.map((x,i)=>({
+      name:typeof x.name==='string'?x.name:defaults[i].name,
+      price:Number.isFinite(Number(x.price))&&Number(x.price)>=0?Number(x.price):2.5,count:0
+    }));
+  } catch(e) {}
+  return defaults.map(x=>({...x}));
+}
+let items=loadItems();
+const euro=v=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(v);
+function saveSettings(){
+  try { localStorage.setItem('getraenkeverkauf-items',JSON.stringify(items.map(({name,price})=>({name,price})))); }
+  catch(e) { alert('Speichern ist in diesem Browser nicht möglich. Bitte die App über Safari und die bereitgestellte Webadresse öffnen.'); }
+}
+function updateSummary(){
+  const q=items.reduce((s,x)=>s+x.count,0), t=items.reduce((s,x)=>s+x.count*x.price,0);
+  document.getElementById('itemCount').textContent=q;
+  document.getElementById('total').textContent=euro(t);
+}
+function changeCount(i,d){items[i].count=Math.max(0,items[i].count+d);renderProducts();}
+function renderProducts(){
+  const root=document.getElementById('products'); root.replaceChildren();
+  items.forEach((item,i)=>{
+    const card=document.createElement('article');card.className='product';
+    const name=document.createElement('div');name.className='product-name';name.textContent=item.name.trim()||`Getränk ${i+1}`;
+    const price=document.createElement('div');price.className='price';price.textContent=euro(item.price);
+    const counter=document.createElement('div');counter.className='counter';
+    const minus=document.createElement('button');minus.className='minus';minus.type='button';minus.textContent='−';minus.setAttribute('aria-label','Eins weniger');minus.disabled=item.count===0;minus.addEventListener('click',()=>changeCount(i,-1));
+    const count=document.createElement('span');count.className='count';count.textContent=item.count;
+    const plus=document.createElement('button');plus.className='plus';plus.type='button';plus.textContent='+';plus.setAttribute('aria-label','Eins mehr');plus.addEventListener('click',()=>changeCount(i,1));
+    counter.append(minus,count,plus);card.append(name,price,counter);root.append(card);
+  });updateSummary();
+}
+function renderEditors(){
+  const grid=document.getElementById('editGrid');grid.replaceChildren();
+  items.forEach((item,i)=>{
+    const n=document.createElement('input');n.type='text';n.maxLength=40;n.value=item.name;n.setAttribute('aria-label',`Name Getränk ${i+1}`);n.placeholder=`Getränk ${i+1}`;
+    n.addEventListener('input',()=>{items[i].name=n.value;saveSettings();renderProducts();});
+    const p=document.createElement('input');p.type='number';p.min='0';p.step='0.01';p.inputMode='decimal';p.value=Number(item.price).toFixed(2);p.setAttribute('aria-label',`Preis Getränk ${i+1} in Euro`);
+    p.addEventListener('change',()=>{const v=Number(String(p.value).replace(',','.'));items[i].price=Number.isFinite(v)&&v>=0?v:0;p.value=items[i].price.toFixed(2);saveSettings();renderProducts();});
+    grid.append(n,p);
+  });
+}
+document.getElementById('settingsToggle').addEventListener('click',()=>{
+  const panel=document.getElementById('settingsPanel');panel.hidden=!panel.hidden;
+  document.getElementById('settingsToggle').textContent=panel.hidden?'⚙️ Getränke bearbeiten':'✓ Fertig';
+  if(!panel.hidden)renderEditors();
+});
+document.getElementById('reset').addEventListener('click',()=>{items.forEach(x=>x.count=0);renderProducts();});
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+renderProducts();
+</script>
+</body>
+</html>
